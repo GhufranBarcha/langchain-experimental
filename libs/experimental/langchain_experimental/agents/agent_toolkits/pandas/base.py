@@ -21,6 +21,7 @@ from langchain.agents.openai_functions_agent.base import (
     OpenAIFunctionsAgent,
     create_openai_functions_agent,
 )
+from langchain_core.agents import AgentFinish
 from langchain_core.callbacks import BaseCallbackManager
 from langchain_core.language_models import BaseLanguageModel, LanguageModelLike
 from langchain_core.messages import SystemMessage
@@ -44,6 +45,25 @@ from langchain_experimental.agents.agent_toolkits.pandas.prompt import (
     SUFFIX_WITH_MULTI_DF,
 )
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
+
+
+class PandasAgentExecutor(AgentExecutor):
+    """An AgentExecutor that returns image in the output dictionary."""
+
+    def _get_final_output(
+        self,
+        thought: AgentFinish,
+        intermediate_steps: list,
+        **kwargs: Any,
+    ) -> Any:
+        """Return the final output."""
+        output = super()._get_final_output(thought, intermediate_steps, **kwargs)
+        for step in intermediate_steps:
+            tool_call, tool_output = step
+            if isinstance(tool_output, dict) and "image" in tool_output:
+                output["image"] = tool_output["image"]
+                break
+        return output
 
 
 def _get_multi_prompt(
@@ -346,7 +366,7 @@ def create_pandas_dataframe_agent(
             "'tool-calling', 'openai-tools', 'openai-functions', or "
             "'zero-shot-react-description'."
         )
-    return AgentExecutor(
+    return PandasAgentExecutor(
         agent=agent,
         tools=tools,
         callback_manager=callback_manager,
