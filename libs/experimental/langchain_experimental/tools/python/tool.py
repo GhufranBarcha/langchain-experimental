@@ -1,10 +1,11 @@
 """A tool for running python code in a REPL."""
 
 import ast
+import base64
 import re
 import sys
 from contextlib import redirect_stdout
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Any, Dict, Optional, Type
 
 from langchain_core.callbacks.manager import (
@@ -113,7 +114,7 @@ class PythonAstREPLTool(BaseTool):
         self,
         query: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
-    ) -> str:
+    ) -> Any:
         """Use the tool."""
         try:
             if self.sanitize_input:
@@ -130,6 +131,22 @@ class PythonAstREPLTool(BaseTool):
                     if ret is None:
                         return io_buffer.getvalue()
                     else:
+                        # Try to detect and handle plot objects
+                        # Matplotlib
+                        if "matplotlib.figure.Figure" in str(type(ret)):
+                            buf = BytesIO()
+                            ret.savefig(buf, format="png")
+                            buf.seek(0)
+                            img_str = base64.b64encode(buf.read()).decode()
+                            return {"image": img_str}
+                        # Plotly
+                        if "plotly.graph_objs._figure.Figure" in str(type(ret)):
+                            try:
+                                img_bytes = ret.to_image(format="png")
+                                img_str = base64.b64encode(img_bytes).decode()
+                                return {"image": img_str}
+                            except Exception as e:
+                                return f"Error converting plotly figure to image: {e}"
                         return ret
             except Exception:
                 with redirect_stdout(io_buffer):
